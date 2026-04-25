@@ -184,6 +184,11 @@ class TrackedContract(models.Model):
         blank=True,
         help_text="List of event type names used by the whitelist/blacklist filter.",
     )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Custom attributes for storing contract metadata (team, owner, cost center, etc.)",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1403,3 +1408,88 @@ class ContractMetadata(models.Model):
 
     def __str__(self):
         return f"Metadata({self.contract.contract_id[:8]}...)"
+
+
+class ContractSource(models.Model):
+    """
+    Uploaded contract source code for verification.
+    """
+
+    contract = models.ForeignKey(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="sources",
+        help_text="Contract this source belongs to",
+    )
+    source_file = models.FileField(
+        upload_to="contract_sources/",
+        help_text="Uploaded source file (Rust code or tarball)",
+    )
+    abi_json = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="ABI JSON extracted from source or uploaded separately",
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="uploaded_sources",
+        help_text="User who uploaded this source",
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+        indexes = [
+            models.Index(fields=["contract", "uploaded_at"]),
+        ]
+
+    def __str__(self):
+        return f"Source for {self.contract.contract_id[:8]}... ({self.uploaded_at})"
+
+
+class ContractVerification(models.Model):
+    """
+    Verification result for contract source against deployed bytecode.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        VERIFIED = "verified", "Verified"
+        FAILED = "failed", "Failed"
+
+    contract = models.OneToOneField(
+        TrackedContract,
+        on_delete=models.CASCADE,
+        related_name="verification",
+        help_text="Contract being verified",
+    )
+    source = models.ForeignKey(
+        ContractSource,
+        on_delete=models.CASCADE,
+        related_name="verifications",
+        help_text="Source used for verification",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        help_text="Verification status",
+    )
+    bytecode_hash = models.CharField(
+        max_length=64,
+        help_text="SHA256 hash of the deployed bytecode",
+    )
+    compiler_version = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Compiler version used to produce the bytecode",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, help_text="Error message if verification failed")
+
+    class Meta:
+        ordering = ["-verified_at"]
+
+    def __str__(self):
+        return f"Verification for {self.contract.contract_id[:8]}... ({self.status})"

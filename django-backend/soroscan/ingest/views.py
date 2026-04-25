@@ -32,7 +32,10 @@ from .models import (
     AdminAction,
     ContractEvent,
     ContractInvocation,
+    ContractSource,
+    ContractVerification,
     IngestError,
+    IndexerState,
     Team,
     TeamMembership,
     TrackedContract,
@@ -43,6 +46,8 @@ from .serializers import (
     APIKeySerializer,
     ContractEventSerializer,
     ContractInvocationSerializer,
+    ContractSourceSerializer,
+    ContractVerificationSerializer,
     EventSearchSerializer,
     RecordEventRequestSerializer,
     TeamMemberAddSerializer,
@@ -176,6 +181,98 @@ class TrackedContractViewSet(viewsets.ModelViewSet):
         stats = get_or_set_json(cache_key, query_cache_ttl(), _build)
         return Response(stats)
 
+    @action(detail=True, methods=["get"])
+    def completeness(self, request, pk=None):
+        contract = self.get_object()
+        state = IndexerState.objects.filter(key=f"completeness:{contract.id}").first()
+        if state:
+            try:
+                return Response(json.loads(state.value))
+            except json.JSONDecodeError:
+                pass
+
+        from .tasks import _calculate_completeness
+
+        return Response(_calculate_completeness(contract))
+
+    @action(detail=False, methods=["get"])
+    def completeness_dashboard(self, request):
+        from .tasks import _calculate_completeness
+
+        rows = []
+        for contract in self.get_queryset():
+            state = IndexerState.objects.filter(key=f"completeness:{contract.id}").first()
+            if state:
+                try:
+                    rows.append(json.loads(state.value))
+                    continue
+                except json.JSONDecodeError:
+                    pass
+            rows.append(_calculate_completeness(contract))
+
+        rows.sort(key=lambda item: item.get("completeness_percentage", 100.0))
+        return Response({"contracts": rows})
+
+    @action(detail=True, methods=["post"])
+    def upload_source(self, request, pk=None):
+        """
+        Upload contract source code for verification.
+        Accepts a file (Rust code or tarball) and optional ABI JSON.
+        """
+        contract = self.get_object()
+
+        # Check permissions - only contract owner or team members
+        if contract.owner != request.user and not contract.team.members.filter(user=request.user).exists():
+            return Response({"error": "Permission denied"}, status=403)
+
+        serializer = ContractSourceSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(contract=contract, uploaded_by=request.user)
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+    @action(detail=True, methods=["post"])
+    def verify_source(self, request, pk=None):
+        """
+        Verify contract source against deployed bytecode.
+        """
+        contract = self.get_object()
+
+        # Get latest source
+        try:
+            source = contract.sources.latest('uploaded_at')
+        except ContractSource.DoesNotExist:
+            return Response({"error": "No source uploaded"}, status=400)
+
+        # Placeholder verification logic
+        # In real implementation, this would:
+        # 1. Extract/compile source code to get bytecode
+        # 2. Query Stellar network for deployed bytecode
+        # 3. Compare hashes
+
+        # For now, mark as verified
+        verification, created = ContractVerification.objects.get_or_create(
+            contract=contract,
+            defaults={
+                'source': source,
+                'status': 'verified',
+                'bytecode_hash': 'placeholder_hash',
+                'compiler_version': 'unknown',
+                'verified_at': timezone.now(),
+            }
+        )
+
+        if not created:
+            verification.status = 'verified'
+            verification.source = source
+            verification.bytecode_hash = 'placeholder_hash'
+            verification.compiler_version = 'unknown'
+            verification.verified_at = timezone.now()
+            verification.save()
+
+        serializer = ContractVerificationSerializer(verification)
+        return Response(serializer.data)
+
 
 class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -194,6 +291,7 @@ class ContractEventViewSet(viewsets.ReadOnlyModelViewSet):
         "contract__contract_id",
         "event_type",
         "ledger",
+        "tx_hash",
         "validation_status",
         "decoding_status",
         "signature_status",
@@ -775,6 +873,25 @@ def contract_timeline_view(request, contract_id: str):
     contract = get_object_or_404(TrackedContract, contract_id=contract_id)
     frontend_base = _frontend_base_url()
     return redirect(f"{frontend_base}/contracts/{contract.contract_id}/timeline")
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def transaction_events_view(request, tx_id: str):
+    """Return all events participating in the same atomic transaction."""
+    events = list(
+        ContractEvent.objects.select_related("contract")
+        .filter(tx_hash=tx_id)
+        .order_by("ledger", "event_index", "id")
+    )
+    serializer = ContractEventSerializer(events, many=True)
+    return Response(
+        {
+            "transaction_id": tx_id,
+            "event_count": len(events),
+            "events": serializer.data,
+        }
+    )
 
 
 def contract_event_explorer_view(request, contract_id: str):

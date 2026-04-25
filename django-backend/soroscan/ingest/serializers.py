@@ -6,7 +6,41 @@ from rest_framework import serializers
 from django.utils.text import slugify
 
 from .cache_utils import get_event_count
-from .models import APIKey, ContractEvent, ContractInvocation, Team, TeamMembership, TrackedContract, WebhookSubscription
+from .models import (
+    APIKey,
+    ContractEvent,
+    ContractInvocation,
+    ContractSource,
+    ContractVerification,
+    Organization,
+    OrganizationMembership,
+    Team,
+    TeamMembership,
+    TrackedContract,
+    WebhookSubscription,
+)
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    """Organization serializer with owner-managed tenancy settings."""
+
+    class Meta:
+        model = Organization
+        fields = ["id", "name", "slug", "settings", "quota", "created_at", "updated_at"]
+        read_only_fields = ["id", "slug", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Authentication required.")
+        org = Organization.objects.create(owner=user, **validated_data)
+        OrganizationMembership.objects.get_or_create(
+            organization=org,
+            user=user,
+            defaults={"role": OrganizationMembership.Role.OWNER, "invited_by": user},
+        )
+        return org
 
 
 class TeamSerializer(serializers.ModelSerializer):
@@ -80,6 +114,7 @@ class TrackedContractSerializer(serializers.ModelSerializer):
             "max_events_per_minute",
             "event_filter_type",
             "event_filter_list",
+            "metadata",
             "last_indexed_ledger",
             "team",
             "event_count",
@@ -105,7 +140,6 @@ class TrackedContractSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("You are not a member of this team.")
         return value
 
-
 class ContractEventSerializer(serializers.ModelSerializer):
     """
     Serializer for ContractEvent model.
@@ -114,6 +148,7 @@ class ContractEventSerializer(serializers.ModelSerializer):
 
     contract_id = serializers.CharField(source="contract.contract_id", read_only=True)
     contract_name = serializers.CharField(source="contract.name", read_only=True)
+    transaction_id = serializers.CharField(source="tx_hash", read_only=True)
 
     class Meta:
         model = ContractEvent
@@ -130,6 +165,7 @@ class ContractEventSerializer(serializers.ModelSerializer):
             "event_index",
             "timestamp",
             "tx_hash",
+            "transaction_id",
             "schema_version",
             "validation_status",
             "signature_status",
@@ -146,6 +182,7 @@ class ContractEventSerializer(serializers.ModelSerializer):
             "ledger",
             "timestamp",
             "tx_hash",
+            "transaction_id",
             "schema_version",
             "validation_status",
             "signature_status",
@@ -305,6 +342,7 @@ class EventSearchSerializer(serializers.ModelSerializer):
 
     contract_id = serializers.CharField(source="contract.contract_id", read_only=True)
     contract_name = serializers.CharField(source="contract.name", read_only=True)
+    transaction_id = serializers.CharField(source="tx_hash", read_only=True)
     relevance_score = serializers.SerializerMethodField()
 
     class Meta:
@@ -320,6 +358,7 @@ class EventSearchSerializer(serializers.ModelSerializer):
             "event_index",
             "timestamp",
             "tx_hash",
+            "transaction_id",
             "validation_status",
             "signature_status",
             "relevance_score",
@@ -329,3 +368,41 @@ class EventSearchSerializer(serializers.ModelSerializer):
     def get_relevance_score(self, obj) -> float:
         # Placeholder — set to 1.0 until full-text ranking is implemented.
         return 1.0
+
+
+class ContractSourceSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ContractSource model.
+    """
+
+    class Meta:
+        model = ContractSource
+        fields = [
+            "id",
+            "contract",
+            "source_file",
+            "abi_json",
+            "uploaded_by",
+            "uploaded_at",
+        ]
+        read_only_fields = ["id", "uploaded_by", "uploaded_at"]
+
+
+class ContractVerificationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ContractVerification model.
+    """
+
+    class Meta:
+        model = ContractVerification
+        fields = [
+            "id",
+            "contract",
+            "source",
+            "status",
+            "bytecode_hash",
+            "compiler_version",
+            "verified_at",
+            "error_message",
+        ]
+        read_only_fields = ["id", "verified_at"]

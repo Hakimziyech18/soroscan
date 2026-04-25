@@ -147,6 +147,15 @@ class TestTrackedContractViewSet:
             }
         ]
 
+    def test_contract_completeness_endpoint_returns_percentage(self, authenticated_client, contract):
+        ContractEventFactory(contract=contract, ledger=100, event_index=0)
+        ContractEventFactory(contract=contract, ledger=102, event_index=0)
+
+        response = authenticated_client.get(reverse("contract-completeness", args=[contract.id]))
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["missing_ledgers"] == 1
+        assert response.data["completeness_percentage"] < 100.0
+
 
 @pytest.mark.django_db
 class TestTeamViewSet:
@@ -164,9 +173,18 @@ class TestTeamViewSet:
         assert len(listed.data["results"]) >= 1
 
     def test_team_member_sees_team_contract(self, api_client):
+        from soroscan.ingest.models import Organization, OrganizationMembership
+
         owner = UserFactory()
         member = UserFactory()
-        team = Team.objects.create(name="Shared", slug="shared", created_by=owner)
+        org = Organization.objects.create(name="Shared Org", slug="shared-org", owner=owner)
+        OrganizationMembership.objects.create(
+            organization=org, user=owner, role=OrganizationMembership.Role.OWNER
+        )
+        OrganizationMembership.objects.create(
+            organization=org, user=member, role=OrganizationMembership.Role.MEMBER
+        )
+        team = Team.objects.create(name="Shared", slug="shared", organization=org, created_by=owner)
         TeamMembership.objects.create(
             team=team, user=owner, role=TeamMembership.Role.ADMIN
         )
@@ -488,6 +506,23 @@ class TestEventExplorerPageView:
         response = api_client.get(url)
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestTransactionCorrelationView:
+    def test_transaction_endpoint_groups_events(self, authenticated_client, user):
+        contract_a = TrackedContractFactory(owner=user)
+        contract_b = TrackedContractFactory(owner=user)
+        shared_tx = "tx-shared-001"
+        ContractEventFactory(contract=contract_a, tx_hash=shared_tx, ledger=12, event_index=1)
+        ContractEventFactory(contract=contract_b, tx_hash=shared_tx, ledger=12, event_index=2)
+
+        url = reverse("transaction-events", args=[shared_tx])
+        response = authenticated_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["transaction_id"] == shared_tx
+        assert response.data["event_count"] == 2
 
     def test_contract_event_types_endpoint(self, api_client, contract):
         # Create events with different types

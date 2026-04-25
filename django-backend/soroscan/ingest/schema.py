@@ -22,6 +22,7 @@ from .models import (
     ContractEvent,
     ContractInvocation,
     ContractMetadata,
+    ContractVerification,
     Notification,
     TrackedContract,
     WebhookDeliveryLog,
@@ -63,7 +64,15 @@ class ContractType:
     deprecation_reason: auto
     event_filter_type: auto
     event_filter_list: strawberry.scalars.JSON
+    metadata: strawberry.scalars.JSON
     created_at: auto
+
+    @strawberry.field
+    def verification_status(self) -> Optional[str]:
+        try:
+            return self.verification.status
+        except ContractVerification.DoesNotExist:
+            return None
 
     @strawberry.field
     def team_id(self) -> Optional[int]:
@@ -141,6 +150,10 @@ class EventType:
     @strawberry.field
     def contract_name(self) -> str:
         return self.contract.name
+
+    @strawberry.field
+    def transaction_id(self) -> str:
+        return self.tx_hash
 
 
 @strawberry_django.type(ContractInvocation)
@@ -523,6 +536,15 @@ class Query:
             return None
 
     @strawberry.field
+    def transaction(self, id: str) -> list[EventType]:
+        """Return cross-contract events grouped by atomic transaction id."""
+        return list(
+            ContractEvent.objects.select_related("contract")
+            .filter(tx_hash=id)
+            .order_by("ledger", "event_index", "id")
+        )
+
+    @strawberry.field
     def search_events(self, query: EventSearchQuery) -> list[EventSearchResult]:
         """
         Full-text and field-level search on contract event payloads.
@@ -797,6 +819,7 @@ class Mutation:
         name: str,
         description: str = "",
         team_id: Optional[int] = None,
+        metadata: Optional[strawberry.scalars.JSON] = None,
     ) -> ContractType:
         """Register a new contract for indexing."""
         user = _get_authenticated_user(info)
@@ -820,6 +843,7 @@ class Mutation:
             description=description,
             owner=user,
             team=team,
+            metadata=metadata or {},
         )
         return contract
 
@@ -924,6 +948,7 @@ class Mutation:
         alias: Optional[str] = None,
         event_filter_type: Optional[str] = None,
         event_filter_list: Optional[list[str]] = None,
+        metadata: Optional[strawberry.scalars.JSON] = None,
     ) -> Optional[ContractType]:
         """Update a tracked contract."""
         user = _get_authenticated_user(info)
@@ -950,6 +975,8 @@ class Mutation:
             contract.event_filter_type = event_filter_type
         if event_filter_list is not None:
             contract.event_filter_list = event_filter_list
+        if metadata is not None:
+            contract.metadata = metadata
 
         contract.save()
 

@@ -22,6 +22,8 @@ from .models import (
     ContractMetadata,
     ContractSigningKey,
     ContractQuota,
+    ContractSource,
+    ContractVerification,
     DataRetentionPolicy,
     EventSchema,
     IndexerState,
@@ -151,7 +153,7 @@ class TrackedContractAdmin(AdminAuditMixin, admin.ModelAdmin):
         ("Advanced", {
             "fields": (
                 "deprecation_status", "deprecation_reason",
-                "max_events_per_minute", "abi_schema", "json_schema",
+                "max_events_per_minute", "abi_schema", "json_schema", "metadata",
                 "last_indexed_ledger",
             ),
             "classes": ("collapse",),
@@ -923,3 +925,25 @@ class ContractMetadataAdmin(AdminAuditMixin, admin.ModelAdmin):
     search_fields = ["name", "description", "tags"]
     list_filter = [TagListFilter]
     readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(ContractSource)
+class ContractSourceAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = ["contract", "uploaded_by", "uploaded_at", "file_size"]
+    list_filter = ["uploaded_at"]
+    search_fields = ["contract__name", "contract__contract_id", "uploaded_by__username"]
+    readonly_fields = ["uploaded_at"]
+
+    def file_size(self, obj):
+        if obj.source_file:
+            return f"{obj.source_file.size} bytes"
+        return "—"
+    file_size.short_description = "File Size"
+
+
+@admin.register(ContractVerification)
+class ContractVerificationAdmin(AdminAuditMixin, admin.ModelAdmin):
+    list_display = ["contract", "status", "verified_at", "compiler_version"]
+    list_filter = ["status", "verified_at"]
+    search_fields = ["contract__name", "contract__contract_id"]
+    readonly_fields = ["verified_at"]
