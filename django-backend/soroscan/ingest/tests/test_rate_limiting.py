@@ -1,6 +1,7 @@
 """
 Tests for ingest-time rate limiting.
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -25,7 +26,7 @@ class TestIngestRateLimiting:
             owner=user,
             max_events_per_minute=None,
         )
-        
+
         # Should allow any number of events
         for _ in range(100):
             assert check_ingest_rate(contract) is True
@@ -40,16 +41,16 @@ class TestIngestRateLimiting:
             owner=user,
             max_events_per_minute=5,
         )
-        
+
         # First 5 events should pass
         for i in range(5):
             result = check_ingest_rate(contract)
             assert result is True, f"Event {i+1} should be allowed"
-        
+
         # 6th event should raise Throttled
         with pytest.raises(Throttled) as exc_info:
             check_ingest_rate(contract)
-            
+
         assert "Rate limit exceeded" in str(exc_info.value.detail)
         assert hasattr(exc_info.value, "wait")
         assert exc_info.value.status_code == 429
@@ -64,17 +65,17 @@ class TestIngestRateLimiting:
             owner=user,
             max_events_per_minute=3,
         )
-        
+
         # Use up the limit
         for _ in range(3):
             assert check_ingest_rate(contract) is True
-        
+
         # Should be rate limited
         with pytest.raises(Throttled):
             check_ingest_rate(contract)
-        
+
         # Clear cache to simulate new minute
         cache.clear()
-        
+
         # Should allow events again
         assert check_ingest_rate(contract) is True
