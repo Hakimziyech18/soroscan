@@ -4,6 +4,7 @@ Tests for ingest-time rate limiting.
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from rest_framework.exceptions import Throttled
 
 from soroscan.ingest.models import TrackedContract
 from soroscan.ingest.rate_limit import check_ingest_rate
@@ -29,8 +30,8 @@ class TestIngestRateLimiting:
         for _ in range(100):
             assert check_ingest_rate(contract) is True
 
-    def test_rate_limit_enforced(self):
-        """Contract should enforce max_events_per_minute limit."""
+    def test_rate_limit_enforced_returns_429(self):
+        """Contract should enforce max_events_per_minute limit with Throttled exception (HTTP 429)."""
         cache.clear()
         user = User.objects.create_user(username="testuser", password="testpass")
         contract = TrackedContract.objects.create(
@@ -45,9 +46,13 @@ class TestIngestRateLimiting:
             result = check_ingest_rate(contract)
             assert result is True, f"Event {i+1} should be allowed"
         
-        # 6th event should be rate limited
-        result = check_ingest_rate(contract)
-        assert result is False, "Event 6 should be rate limited"
+        # 6th event should raise Throttled
+        with pytest.raises(Throttled) as exc_info:
+            check_ingest_rate(contract)
+            
+        assert "Rate limit exceeded" in str(exc_info.value.detail)
+        assert hasattr(exc_info.value, "wait")
+        assert exc_info.value.status_code == 429
 
     def test_rate_limit_resets_per_minute(self):
         """Rate limit counter should reset each minute."""
@@ -65,7 +70,8 @@ class TestIngestRateLimiting:
             assert check_ingest_rate(contract) is True
         
         # Should be rate limited
-        assert check_ingest_rate(contract) is False
+        with pytest.raises(Throttled):
+            check_ingest_rate(contract)
         
         # Clear cache to simulate new minute
         cache.clear()
