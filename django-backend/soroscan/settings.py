@@ -453,6 +453,11 @@ LOGGING["loggers"]["soroscan.slow_queries"] = {
     "level": "WARNING",
     "propagate": False,
 }
+LOGGING["loggers"]["soroscan.migrate"] = {
+    "handlers": ["console"],
+    "level": "INFO",
+    "propagate": False,
+}
 
 # ---------------------------------------------------------------------------
 # Security audit logger — admin login success / failure events
