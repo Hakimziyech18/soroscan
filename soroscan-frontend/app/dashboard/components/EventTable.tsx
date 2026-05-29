@@ -25,7 +25,9 @@ export function EventTable({ events, loading, onEventClick }: EventTableProps) {
   };
 
   const getEventTypeColor = (eventType: string): string => {
-    const hash = eventType.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hash = eventType
+      .split("")
+      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const colors = [
       "rgba(0, 255, 156, 0.8)",
       "rgba(0, 212, 255, 0.8)",
@@ -43,9 +45,105 @@ export function EventTable({ events, loading, onEventClick }: EventTableProps) {
     );
   }
 
+  if (!events.length) {
+    return (
+      <div className={styles.tableWrap}>
+        <div className={styles.emptyTable}>
+          No events found. Select a contract and adjust filters to view events.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.tableWrap}>
-      <table className={styles.eventTable}>
+      <style>
+        {`
+          .soroscan-events-card-grid {
+            display: none;
+          }
+
+          .soroscan-event-card {
+            width: 100%;
+            text-align: left;
+            background: rgba(13, 21, 34, 0.92);
+            border: 1px solid rgba(0, 212, 255, 0.25);
+            border-radius: 10px;
+            padding: 1rem;
+            color: #d6f7ff;
+            cursor: pointer;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+          }
+
+          .soroscan-event-card:hover,
+          .soroscan-event-card:focus {
+            outline: none;
+            border-color: rgba(0, 212, 255, 0.75);
+            box-shadow: 0 0 18px rgba(0, 212, 255, 0.18);
+            transform: translateY(-1px);
+          }
+
+          .soroscan-event-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 0.85rem;
+          }
+
+          .soroscan-event-card-title {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+          }
+
+          .soroscan-event-card-label {
+            font-size: 0.7rem;
+            color: #7ba8b5;
+            text-transform: uppercase;
+            letter-spacing: 0.05rem;
+          }
+
+          .soroscan-event-card-grid-inner {
+            display: grid;
+            gap: 0.75rem;
+          }
+
+          .soroscan-event-card-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            border-top: 1px solid rgba(123, 168, 181, 0.14);
+            padding-top: 0.65rem;
+          }
+
+          .soroscan-event-card-value {
+            color: #d6f7ff;
+            text-align: right;
+            word-break: break-word;
+          }
+
+          .soroscan-event-card-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 1rem;
+          }
+
+          @media (max-width: 768px) {
+            .soroscan-events-table {
+              display: none;
+            }
+
+            .soroscan-events-card-grid {
+              display: grid;
+              grid-template-columns: 1fr;
+              gap: 0.9rem;
+            }
+          }
+        `}
+      </style>
+
+      <table className={`${styles.eventTable} soroscan-events-table`}>
         <thead>
           <tr>
             <th>Contract</th>
@@ -57,117 +155,183 @@ export function EventTable({ events, loading, onEventClick }: EventTableProps) {
           </tr>
         </thead>
         <tbody>
-          {!events.length ? (
-            <tr>
-              <td colSpan={6} className={styles.emptyTable}>
-                {loading
-                  ? "Loading events..."
-                  : "No events found. Select a contract and adjust filters to view events."}
-              </td>
-            </tr>
-          ) : (
-            events.map((event) => (
-              <tr
-                key={event.id}
-                style={{
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = `0 0 15px ${getEventTypeColor(event.eventType)}`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <td data-label="Contract">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <code>{shortHash(event.contractId)}</code>
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      style={{
-                        padding: "0.2rem 0.4rem",
-                        fontSize: "0.7rem",
-                        minWidth: "auto",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(event.contractId, `contract-${event.id}`);
-                      }}
-                      title="Copy contract ID"
-                    >
-                      {copiedId === `contract-${event.id}` ? "✓" : "📋"}
-                    </button>
-                  </div>
-                </td>
-                <td data-label="Type">
-                  <span
-                    className={styles.pill}
-                    style={{
-                      borderColor: getEventTypeColor(event.eventType),
-                      backgroundColor: `${getEventTypeColor(event.eventType)}15`,
-                      color: getEventTypeColor(event.eventType),
-                    }}
-                  >
-                    {event.eventType}
-                  </span>
-                </td>
-                <td data-label="Ledger">
+          {events.map((event) => (
+            <tr
+              key={event.id}
+              style={{
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+              onClick={() => onEventClick(event)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 15px ${getEventTypeColor(event.eventType)}`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              <td data-label="Contract">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <code>{shortHash(event.contractId)}</code>
                   <button
                     type="button"
                     className={styles.btn}
                     style={{
-                      padding: "0.2rem 0.5rem",
-                      fontSize: "0.75rem",
+                      padding: "0.2rem 0.4rem",
+                      fontSize: "0.7rem",
+                      minWidth: "auto",
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
+                      void copyToClipboard(
+                        event.contractId,
+                        `contract-${event.id}`,
+                      );
                     }}
+                    title="Copy contract ID"
                   >
-                    {event.ledger}
+                    {copiedId === `contract-${event.id}` ? "✓" : "📋"}
                   </button>
-                </td>
-                <td data-label="Time">{formatDateTime(event.timestamp)}</td>
-                <td data-label="Tx">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <code>{shortHash(event.txHash)}</code>
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      style={{
-                        padding: "0.2rem 0.4rem",
-                        fontSize: "0.7rem",
-                        minWidth: "auto",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(event.txHash, `tx-${event.id}`);
-                      }}
-                      title="Copy transaction hash"
-                    >
-                      {copiedId === `tx-${event.id}` ? "✓" : "📋"}
-                    </button>
-                  </div>
-                </td>
-                <td data-label="Actions">
+                </div>
+              </td>
+              <td data-label="Type">
+                <span
+                  className={styles.pill}
+                  style={{
+                    borderColor: getEventTypeColor(event.eventType),
+                    backgroundColor: `${getEventTypeColor(event.eventType)}15`,
+                    color: getEventTypeColor(event.eventType),
+                  }}
+                >
+                  {event.eventType}
+                </span>
+              </td>
+              <td data-label="Ledger">{event.ledger}</td>
+              <td data-label="Time">{formatDateTime(event.timestamp)}</td>
+              <td data-label="Tx">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <code>{shortHash(event.txHash)}</code>
                   <button
                     type="button"
                     className={styles.btn}
                     style={{
-                      padding: "0.3rem 0.6rem",
-                      fontSize: "0.75rem",
+                      padding: "0.2rem 0.4rem",
+                      fontSize: "0.7rem",
+                      minWidth: "auto",
                     }}
-                    onClick={() => onEventClick(event)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void copyToClipboard(event.txHash, `tx-${event.id}`);
+                    }}
+                    title="Copy transaction hash"
                   >
-                    View
+                    {copiedId === `tx-${event.id}` ? "✓" : "📋"}
                   </button>
-                </td>
-              </tr>
-            ))
-          )}
+                </div>
+              </td>
+              <td data-label="Actions">
+                <button
+                  type="button"
+                  className={styles.btn}
+                  style={{
+                    padding: "0.3rem 0.6rem",
+                    fontSize: "0.75rem",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEventClick(event);
+                  }}
+                >
+                  View
+                </button>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
+
+      <div className="soroscan-events-card-grid" data-testid="events-card-grid">
+        {events.map((event) => (
+          <article key={event.id} className="soroscan-event-card">
+            <div className="soroscan-event-card-header">
+              <div className="soroscan-event-card-title">
+                <span className="soroscan-event-card-label">Event Type</span>
+                <span
+                  className={styles.pill}
+                  style={{
+                    borderColor: getEventTypeColor(event.eventType),
+                    backgroundColor: `${getEventTypeColor(event.eventType)}15`,
+                    color: getEventTypeColor(event.eventType),
+                  }}
+                >
+                  {event.eventType}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={styles.btn}
+                style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
+                onClick={() => onEventClick(event)}
+              >
+                View
+              </button>
+            </div>
+
+            <div className="soroscan-event-card-grid-inner">
+              <div className="soroscan-event-card-row">
+                <span className="soroscan-event-card-label">Contract</span>
+                <span className="soroscan-event-card-value">
+                  <code>{shortHash(event.contractId)}</code>
+                </span>
+              </div>
+
+              <div className="soroscan-event-card-row">
+                <span className="soroscan-event-card-label">Ledger</span>
+                <span className="soroscan-event-card-value">
+                  {event.ledger}
+                </span>
+              </div>
+
+              <div className="soroscan-event-card-row">
+                <span className="soroscan-event-card-label">Time</span>
+                <span className="soroscan-event-card-value">
+                  {formatDateTime(event.timestamp)}
+                </span>
+              </div>
+
+              <div className="soroscan-event-card-row">
+                <span className="soroscan-event-card-label">Transaction</span>
+                <span className="soroscan-event-card-value">
+                  <code>{shortHash(event.txHash)}</code>
+                </span>
+              </div>
+            </div>
+
+            <div className="soroscan-event-card-actions">
+              <button
+                type="button"
+                className={styles.btn}
+                style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
+                onClick={() => onEventClick(event)}
+              >
+                View details
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
