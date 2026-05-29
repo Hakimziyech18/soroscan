@@ -1087,6 +1087,76 @@ def contract_event_types_view(request, contract_id: str):
     return Response(result)
 
 
+
+@extend_schema(
+    parameters=[
+        inline_serializer(
+            name="EventTypeStatisticsParams",
+            fields={
+                "contract_id": serializers.CharField(required=False),
+            },
+        )
+    ],
+    responses=inline_serializer(
+        name="EventTypeStatisticsResponse",
+        fields={
+            "contract_id": serializers.CharField(allow_null=True),
+            "total_events": serializers.IntegerField(),
+            "event_types": serializers.JSONField(),
+        },
+    ),
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def event_type_statistics_view(request):
+    """Return event type distribution, optionally filtered by contract_id."""
+    contract_id = request.query_params.get("contract_id", "").strip()
+
+    events = ContractEvent.objects.select_related("contract").all()
+    contract = None
+
+    if contract_id:
+        contract = get_cached_contract(contract_id)
+        if not contract:
+            from django.http import Http404
+            raise Http404
+        events = events.filter(contract=contract)
+
+    cache_key = stable_cache_key(
+        "event_type_statistics",
+        {"contract_id": contract_id or "all"},
+    )
+
+    def _build():
+        stats = list(
+            events.values("contract__contract_id", "event_type")
+            .annotate(
+                count=Count("id"),
+                first_seen=Min("timestamp"),
+                last_seen=Max("timestamp"),
+            )
+            .order_by("contract__contract_id", "-count", "event_type")
+        )
+
+        return {
+            "contract_id": contract.contract_id if contract else None,
+            "total_events": events.count(),
+            "event_types": [
+                {
+                    "contract_id": row["contract__contract_id"],
+                    "event_type": row["event_type"],
+                    "count": row["count"],
+                    "first_seen": row["first_seen"],
+                    "last_seen": row["last_seen"],
+                }
+                for row in stats
+            ],
+        }
+
+    return Response(get_or_set_json(cache_key, 60, _build))
+
+
+
 @extend_schema(
     parameters=[
         inline_serializer(
