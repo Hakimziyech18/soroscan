@@ -5,6 +5,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from soroscan import health
 
 
 @pytest.fixture
@@ -14,13 +15,46 @@ def api_client():
 
 @pytest.mark.django_db
 class TestHealthView:
-    def test_health_returns_ok(self, api_client):
+    def test_health_returns_ok_with_uptime(self, api_client):
         url = reverse("health")
         response = api_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == {"status": "ok"}
+        assert response.data["status"] == "ok"
+        assert "uptime_seconds" in response.data
+        assert "uptime" in response.data
+        assert isinstance(response.data["uptime_seconds"], int)
+        assert response.data["uptime_seconds"] > 0
+        assert isinstance(response.data["uptime"], str)
         assert response["X-SoroScan-Version"] == settings.SOFTWARE_VERSION
+
+    def test_health_uptime_is_accurate(self, api_client, monkeypatch):
+        monkeypatch.setattr(health, "PROCESS_START_TIME", 100.0)
+        monkeypatch.setattr(health.time, "monotonic", lambda: 165.0)
+
+        url = reverse("health")
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["uptime_seconds"] == 65
+        assert response.data["uptime"] == "0d 00:01:05"
+
+    def test_health_uptime_counter_increases_across_requests(self, api_client, monkeypatch):
+        times = iter([110.0, 125.0])
+
+        monkeypatch.setattr(health, "PROCESS_START_TIME", 100.0)
+        monkeypatch.setattr(health.time, "monotonic", lambda: next(times))
+
+        url = reverse("health")
+
+        first_response = api_client.get(url)
+        second_response = api_client.get(url)
+
+        assert first_response.status_code == status.HTTP_200_OK
+        assert second_response.status_code == status.HTTP_200_OK
+        assert first_response.data["uptime_seconds"] == 10
+        assert second_response.data["uptime_seconds"] == 25
+        assert second_response.data["uptime_seconds"] > first_response.data["uptime_seconds"]
 
 
 @pytest.mark.django_db
