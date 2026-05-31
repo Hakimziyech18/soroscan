@@ -9,12 +9,29 @@ interface EventTableProps {
   events: EventRecord[];
   loading: boolean;
   onEventClick: (event: EventRecord) => void;
+  eventTags: Record<string, string[]>;
+  tagSuggestions: string[];
+  onAddTag: (eventId: string, tag: string) => void;
+  onRemoveTag: (eventId: string, tag: string) => void;
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
+  showTags?: boolean;
 }
 
-export function EventTable({ events, loading, onEventClick, hasActiveFilters, onClearFilters }: EventTableProps) {
+export function EventTable({
+  events,
+  loading,
+  onEventClick,
+  eventTags = {},
+  tagSuggestions = [],
+  onAddTag = () => {},
+  onRemoveTag = () => {},
+  hasActiveFilters,
+  onClearFilters,
+  showTags = false,
+}: EventTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -50,6 +67,7 @@ export function EventTable({ events, loading, onEventClick, hasActiveFilters, on
               <th>Ledger</th>
               <th>Time</th>
               <th>Transaction</th>
+              {showTags && <th>Tags</th>}
               <th>Actions</th>
             </tr>
           </thead>
@@ -71,6 +89,11 @@ export function EventTable({ events, loading, onEventClick, hasActiveFilters, on
                 <td data-label="Tx">
                   <div className={styles.skeleton} style={{ width: "100px", height: "20px" }} />
                 </td>
+                {showTags && (
+                  <td data-label="Tags">
+                    <div className={styles.skeleton} style={{ width: "120px", height: "24px" }} />
+                  </td>
+                )}
                 <td data-label="Actions">
                   <div className={styles.skeleton} style={{ width: "50px", height: "28px" }} />
                 </td>
@@ -188,6 +211,7 @@ export function EventTable({ events, loading, onEventClick, hasActiveFilters, on
             <th>Ledger</th>
             <th>Time</th>
             <th>Transaction</th>
+            {showTags && <th>Tags</th>}
             <th>Actions</th>
           </tr>
         </thead>
