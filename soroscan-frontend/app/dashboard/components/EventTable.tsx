@@ -9,10 +9,10 @@ interface EventTableProps {
   events: EventRecord[];
   loading: boolean;
   onEventClick: (event: EventRecord) => void;
-  eventTags: Record<string, string[]>;
-  tagSuggestions: string[];
-  onAddTag: (eventId: string, tag: string) => void;
-  onRemoveTag: (eventId: string, tag: string) => void;
+  eventTags?: Record<string, string[]>;
+  tagSuggestions?: string[];
+  onAddTag?: (eventId: string, tag: string) => void;
+  onRemoveTag?: (eventId: string, tag: string) => void;
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
   showTags?: boolean;
@@ -26,7 +26,7 @@ export function EventTable({
   tagSuggestions = [],
   onAddTag = () => {},
   onRemoveTag = () => {},
-  hasActiveFilters,
+  hasActiveFilters = false,
   onClearFilters,
   showTags = false,
 }: EventTableProps) {
@@ -47,14 +47,111 @@ export function EventTable({
     const hash = eventType
       .split("")
       .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
     const colors = [
       "rgba(0, 255, 156, 0.8)",
       "rgba(0, 212, 255, 0.8)",
       "rgba(255, 170, 0, 0.8)",
       "rgba(255, 102, 255, 0.8)",
     ];
+
     return colors[hash % colors.length];
   };
+
+  const handleCardKeyDown = (
+    event: React.KeyboardEvent<HTMLElement>,
+    record: EventRecord,
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onEventClick(record);
+    }
+  };
+
+  const renderTags = (event: EventRecord) => (
+    <div style={{ display: "grid", gap: "0.4rem" }}>
+      <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+        {(eventTags[event.id] ?? []).map((tag) => (
+          <span
+            key={tag}
+            className={styles.pill}
+            style={{ fontSize: "0.72rem", padding: "0.2rem 0.45rem" }}
+          >
+            {tag}
+            <button
+              type="button"
+              onClick={(clickEvent) => {
+                clickEvent.stopPropagation();
+                onRemoveTag(event.id, tag);
+              }}
+              style={{
+                background: "transparent",
+                border: 0,
+                color: "inherit",
+                cursor: "pointer",
+                marginLeft: "0.3rem",
+                padding: 0,
+              }}
+              title={`Remove ${tag}`}
+            >
+              x
+            </button>
+          </span>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: "0.35rem" }}>
+        <input
+          className={styles.fieldInput}
+          list={`event-tag-suggestions-${event.id}`}
+          value={tagInputs[event.id] ?? ""}
+          placeholder="add tag"
+          onClick={(clickEvent) => clickEvent.stopPropagation()}
+          onChange={(changeEvent) => {
+            const value = changeEvent.target.value;
+            setTagInputs((prev) => ({ ...prev, [event.id]: value }));
+          }}
+          onKeyDown={(keyEvent) => {
+            if (keyEvent.key === "Enter") {
+              keyEvent.preventDefault();
+              keyEvent.stopPropagation();
+
+              const value = tagInputs[event.id] ?? "";
+              onAddTag(event.id, value);
+              setTagInputs((prev) => ({ ...prev, [event.id]: "" }));
+            }
+          }}
+          style={{ padding: "0.35rem 0.45rem", fontSize: "0.75rem" }}
+        />
+
+        <button
+          type="button"
+          className={styles.btn}
+          style={{
+            padding: "0.2rem 0.5rem",
+            fontSize: "0.75rem",
+            minWidth: "auto",
+          }}
+          onClick={(clickEvent) => {
+            clickEvent.stopPropagation();
+
+            const value = tagInputs[event.id] ?? "";
+            onAddTag(event.id, value);
+            setTagInputs((prev) => ({ ...prev, [event.id]: "" }));
+          }}
+          title="Add tag"
+        >
+          +
+        </button>
+      </div>
+
+      <datalist id={`event-tag-suggestions-${event.id}`}>
+        {tagSuggestions.map((tag) => (
+          <option key={tag} value={tag} />
+        ))}
+      </datalist>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -75,27 +172,52 @@ export function EventTable({
             {[...Array(5)].map((_, index) => (
               <tr key={`skeleton-${index}`}>
                 <td data-label="Contract">
-                  <div className={styles.skeleton} style={{ width: "120px", height: "20px" }} />
+                  <div
+                    className={styles.skeleton}
+                    style={{ width: "120px", height: "20px" }}
+                  />
                 </td>
                 <td data-label="Type">
-                  <div className={styles.skeleton} style={{ width: "80px", height: "24px", borderRadius: "12px" }} />
+                  <div
+                    className={styles.skeleton}
+                    style={{
+                      width: "80px",
+                      height: "24px",
+                      borderRadius: "12px",
+                    }}
+                  />
                 </td>
                 <td data-label="Ledger">
-                  <div className={styles.skeleton} style={{ width: "60px", height: "24px" }} />
+                  <div
+                    className={styles.skeleton}
+                    style={{ width: "60px", height: "24px" }}
+                  />
                 </td>
                 <td data-label="Time">
-                  <div className={styles.skeleton} style={{ width: "140px", height: "20px" }} />
+                  <div
+                    className={styles.skeleton}
+                    style={{ width: "140px", height: "20px" }}
+                  />
                 </td>
                 <td data-label="Tx">
-                  <div className={styles.skeleton} style={{ width: "100px", height: "20px" }} />
+                  <div
+                    className={styles.skeleton}
+                    style={{ width: "100px", height: "20px" }}
+                  />
                 </td>
                 {showTags && (
                   <td data-label="Tags">
-                    <div className={styles.skeleton} style={{ width: "120px", height: "24px" }} />
+                    <div
+                      className={styles.skeleton}
+                      style={{ width: "120px", height: "24px" }}
+                    />
                   </td>
                 )}
                 <td data-label="Actions">
-                  <div className={styles.skeleton} style={{ width: "50px", height: "28px" }} />
+                  <div
+                    className={styles.skeleton}
+                    style={{ width: "50px", height: "28px" }}
+                  />
                 </td>
               </tr>
             ))}
@@ -109,7 +231,52 @@ export function EventTable({
     return (
       <div className={styles.tableWrap}>
         <div className={styles.emptyTable}>
-          No events found. Select a contract and adjust filters to view events.
+          {hasActiveFilters ? (
+            <div
+              style={{
+                padding: "3rem 1rem",
+                textAlign: "center",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "1rem",
+              }}
+            >
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "1.25rem",
+                  color: "var(--text-primary)",
+                }}
+              >
+                No events match your criteria
+              </h3>
+              <p
+                style={{
+                  margin: 0,
+                  color: "var(--text-secondary)",
+                  maxWidth: "400px",
+                  lineHeight: 1.5,
+                }}
+              >
+                We couldn&apos;t find any events matching your current search
+                and filter settings. Try adjusting them or clear all filters to
+                see more results.
+              </p>
+              {onClearFilters && (
+                <button
+                  type="button"
+                  className={styles.btn}
+                  style={{ marginTop: "1rem" }}
+                  onClick={onClearFilters}
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          ) : (
+            "No events found. Select a contract and adjust filters to view events."
+          )}
         </div>
       </div>
     );
@@ -132,7 +299,10 @@ export function EventTable({
             padding: 1rem;
             color: #d6f7ff;
             cursor: pointer;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+            transition:
+              border-color 0.2s ease,
+              box-shadow 0.2s ease,
+              transform 0.2s ease;
           }
 
           .soroscan-event-card:hover,
@@ -183,10 +353,11 @@ export function EventTable({
             word-break: break-word;
           }
 
-          .soroscan-event-card-actions {
-            display: flex;
-            justify-content: flex-end;
+          .soroscan-event-card-footer {
             margin-top: 1rem;
+            color: #00ff9c;
+            font-size: 0.78rem;
+            text-align: right;
           }
 
           @media (max-width: 768px) {
@@ -248,8 +419,8 @@ export function EventTable({
                       fontSize: "0.7rem",
                       minWidth: "auto",
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
                       void copyToClipboard(
                         event.contractId,
                         `contract-${event.id}`,
@@ -292,8 +463,8 @@ export function EventTable({
                       fontSize: "0.7rem",
                       minWidth: "auto",
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
                       void copyToClipboard(event.txHash, `tx-${event.id}`);
                     }}
                     title="Copy transaction hash"
@@ -302,6 +473,9 @@ export function EventTable({
                   </button>
                 </div>
               </td>
+
+              {showTags && <td data-label="Tags">{renderTags(event)}</td>}
+
               <td data-label="Actions">
                 <button
                   type="button"
@@ -310,8 +484,8 @@ export function EventTable({
                     padding: "0.3rem 0.6rem",
                     fontSize: "0.75rem",
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={(clickEvent) => {
+                    clickEvent.stopPropagation();
                     onEventClick(event);
                   }}
                 >
@@ -325,7 +499,15 @@ export function EventTable({
 
       <div className="soroscan-events-card-grid" data-testid="events-card-grid">
         {events.map((event) => (
-          <article key={event.id} className="soroscan-event-card">
+          <article
+            key={event.id}
+            className="soroscan-event-card"
+            data-testid="event-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => onEventClick(event)}
+            onKeyDown={(keyEvent) => handleCardKeyDown(keyEvent, event)}
+          >
             <div className="soroscan-event-card-header">
               <div className="soroscan-event-card-title">
                 <span className="soroscan-event-card-label">Event Type</span>
@@ -340,14 +522,7 @@ export function EventTable({
                   {event.eventType}
                 </span>
               </div>
-              <button
-                type="button"
-                className={styles.btn}
-                style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
-                onClick={() => onEventClick(event)}
-              >
-                View
-              </button>
+              <span className="soroscan-event-card-label">Tap for details</span>
             </div>
 
             <div className="soroscan-event-card-grid-inner">
@@ -378,18 +553,18 @@ export function EventTable({
                   <code>{shortHash(event.txHash)}</code>
                 </span>
               </div>
+
+              {showTags && (
+                <div className="soroscan-event-card-row">
+                  <span className="soroscan-event-card-label">Tags</span>
+                  <span className="soroscan-event-card-value">
+                    {(eventTags[event.id] ?? []).join(", ") || "None"}
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="soroscan-event-card-actions">
-              <button
-                type="button"
-                className={styles.btn}
-                style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
-                onClick={() => onEventClick(event)}
-              >
-                View details
-              </button>
-            </div>
+            <div className="soroscan-event-card-footer">View details</div>
           </article>
         ))}
       </div>

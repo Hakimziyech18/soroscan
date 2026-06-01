@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { fetchEventsForExport } from "@/components/ingest/graphql";
@@ -162,6 +162,14 @@ export function ExportEventsModal({
     percent: 0,
   });
 
+  const resetPreview = useCallback((): void => {
+    setPreviewRows(null);
+    setPreviewEstimate(null);
+    setPreviewMessage(
+      "Generate a preview to inspect the first rows and file size before download.",
+    );
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -177,7 +185,7 @@ export function ExportEventsModal({
     resetPreview();
     setIsSubmitting(false);
     setProgress({ message: "Waiting to start export.", percent: 0 });
-  }, [isOpen, initialFilters.since, initialFilters.until]);
+  }, [isOpen, initialFilters.since, initialFilters.until, resetPreview]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -203,14 +211,6 @@ export function ExportEventsModal({
 
   if (!isOpen) {
     return null;
-  }
-
-  function resetPreview(): void {
-    setPreviewRows(null);
-    setPreviewEstimate(null);
-    setPreviewMessage(
-      "Generate a preview to inspect the first rows and file size before download.",
-    );
   }
 
   const toggleColumn = (columnKey: string) => {
@@ -263,7 +263,9 @@ export function ExportEventsModal({
       }
 
       setPreviewRows(rows);
-      setPreviewMessage(`Showing first ${Math.min(10, rows.length)} rows of ${rows.length} events.`);
+      setPreviewMessage(
+        `Showing first ${Math.min(10, rows.length)} rows of ${rows.length} events.`,
+      );
 
       const sampleRows = rows.slice(0, 10);
       const sampleSize = await estimateSerializedSize(
@@ -271,8 +273,11 @@ export function ExportEventsModal({
         Array.from(selectedColumns),
         format,
       );
+
       setPreviewEstimate(sampleSize);
-      onStatus?.(`Preview created for ${rows.length} events as ${format.toUpperCase()}.`);
+      onStatus?.(
+        `Preview created for ${rows.length} events as ${format.toUpperCase()}.`,
+      );
     } catch (caughtError) {
       const message =
         caughtError instanceof Error ? caughtError.message : "Preview failed.";
@@ -481,7 +486,10 @@ export function ExportEventsModal({
             <p className={styles.summary}>{progress.message}</p>
           </div>
 
-          <section className={styles.previewSection} aria-label="Export preview">
+          <section
+            className={styles.previewSection}
+            aria-label="Export preview"
+          >
             <div className={styles.previewHeader}>
               <p className={styles.summary}>{previewMessage}</p>
               {previewEstimate ? (
@@ -509,14 +517,23 @@ export function ExportEventsModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {previewRows.slice(0, 10).map((row) => (
-                      <tr key={row.id}>
-                        {Array.from(selectedColumns).map((columnKey) => {
-                          const value = projectRow(row, Array.from(selectedColumns), "csv")[columnKey];
-                          return <td key={columnKey}>{String(value ?? "")}</td>;
-                        })}
-                      </tr>
-                    ))}
+                    {previewRows.slice(0, 10).map((row) => {
+                      const projectedRow = projectRow(
+                        row,
+                        Array.from(selectedColumns),
+                        "csv",
+                      );
+
+                      return (
+                        <tr key={row.id}>
+                          {Array.from(selectedColumns).map((columnKey) => (
+                            <td key={columnKey}>
+                              {String(projectedRow[columnKey] ?? "")}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -884,55 +901,25 @@ async function estimateSerializedSize(
   selectedColumns: string[],
   format: ExportFormat,
 ): Promise<string> {
-  if (!rows.length) {
-    return "0 bytes";
-  }
+  const serialized = await serializeChunk({ rows, selectedColumns, format });
+  const blob =
+    serialized.content instanceof Blob
+      ? serialized.content
+      : new Blob([serialized.content], { type: serialized.mimeType });
 
-  const projectedRows = rows.map((row) =>
-    projectRow(row, selectedColumns, format === "parquet" ? "json" : format),
-  );
-
-  let serialized = "";
-  if (format === "csv") {
-    serialized = buildCsvPreview(projectedRows, selectedColumns);
-  } else {
-    serialized = JSON.stringify(projectedRows, null, 2);
-  }
-
-  return formatBytes(new Blob([serialized]).size);
+  return formatBytes(blob.size);
 }
 
-function buildCsvPreview(
-  rows: Record<string, unknown>[],
-  selectedColumns: string[],
-): string {
-  const header = selectedColumns.join(",");
-  const lines = rows.map((row) =>
-    selectedColumns
-      .map((key) => csvEscape(String(row[key] ?? "")))
-      .join(","),
-  );
-  return `${header}\n${lines.join("\n")}`;
-}
-
-function csvEscape(value: string): string {
-  if (value.includes(",") || value.includes("\n") || value.includes('"')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-function formatBytes(bytes: number): string {
-  const units = ["bytes", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
+function formatBytes(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
   }
 
-  return `${value.toFixed(1)} ${units[unitIndex]}`;
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function getPapaModule(): Promise<PapaLike> {
