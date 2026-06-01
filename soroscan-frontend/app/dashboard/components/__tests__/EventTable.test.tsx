@@ -334,7 +334,7 @@ describe("EventTable", () => {
   });
 
   describe("Multi-select (issue #569)", () => {
-    it("renders a checkbox in each event row", () => {
+    it("renders one table checkbox per event row plus the header checkbox", () => {
       render(
         <EventTable
           events={mockEvents}
@@ -345,7 +345,7 @@ describe("EventTable", () => {
       );
 
       const checkboxes = screen.getAllByRole("checkbox");
-      expect(checkboxes).toHaveLength(mockEvents.length * 2 + 1);
+      expect(checkboxes).toHaveLength(mockEvents.length + 1);
     });
 
     it("calls onToggleSelect when a row checkbox is clicked", () => {
@@ -358,7 +358,7 @@ describe("EventTable", () => {
         />,
       );
 
-      const checkbox = screen.getByLabelText("Select event 1");
+      const checkbox = screen.getAllByLabelText("Select event 1")[0];
       fireEvent.click(checkbox);
 
       expect(mockOnToggleSelect).toHaveBeenCalledWith("1");
