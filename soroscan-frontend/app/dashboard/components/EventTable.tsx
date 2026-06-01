@@ -395,11 +395,13 @@ export function EventTable({
                 transition: "all 0.2s ease",
               }}
               onClick={() => onEventClick(event)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = `0 0 15px ${getEventTypeColor(event.eventType)}`;
+              onMouseEnter={(mouseEvent) => {
+                mouseEvent.currentTarget.style.boxShadow = `0 0 15px ${getEventTypeColor(
+                  event.eventType,
+                )}`;
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = "none";
+              onMouseLeave={(mouseEvent) => {
+                mouseEvent.currentTarget.style.boxShadow = "none";
               }}
             >
               <td data-label="Contract">
@@ -432,6 +434,7 @@ export function EventTable({
                   </button>
                 </div>
               </td>
+
               <td data-label="Type">
                 <span
                   className={styles.pill}
@@ -444,8 +447,25 @@ export function EventTable({
                   {event.eventType}
                 </span>
               </td>
-              <td data-label="Ledger">{event.ledger}</td>
+
+              <td data-label="Ledger">
+                <button
+                  type="button"
+                  className={styles.btn}
+                  style={{
+                    padding: "0.2rem 0.5rem",
+                    fontSize: "0.75rem",
+                  }}
+                  onClick={(clickEvent) => {
+                    clickEvent.stopPropagation();
+                  }}
+                >
+                  {event.ledger}
+                </button>
+              </td>
+
               <td data-label="Time">{formatDateTime(event.timestamp)}</td>
+
               <td data-label="Tx">
                 <div
                   style={{
