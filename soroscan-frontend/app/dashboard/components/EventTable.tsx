@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { InputHTMLAttributes, KeyboardEvent } from "react";
 import { formatDateTime, shortHash } from "@/components/ingest/formatters";
 import type { EventRecord } from "@/components/ingest/types";
 import styles from "@/components/ingest/ingest-terminal.module.css";
+import toolbarStyles from "./BulkActionsToolbar.module.css";
 
 interface EventTableProps {
   events: EventRecord[];
@@ -16,6 +18,9 @@ interface EventTableProps {
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
   showTags?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (eventId: string) => void;
+  onToggleSelectAll?: () => void;
 }
 
 export function EventTable({
@@ -29,9 +34,17 @@ export function EventTable({
   hasActiveFilters = false,
   onClearFilters,
   showTags = false,
+  selectedIds = new Set(),
+  onToggleSelect = () => {},
+  onToggleSelectAll = () => {},
 }: EventTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
+
+  const allSelected =
+    events.length > 0 && events.every((event) => selectedIds.has(event.id));
+  const someSelected = events.some((event) => selectedIds.has(event.id));
+  const colCount = (showTags ? 7 : 6) + 1;
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -59,7 +72,7 @@ export function EventTable({
   };
 
   const handleCardKeyDown = (
-    event: React.KeyboardEvent<HTMLElement>,
+    event: KeyboardEvent<HTMLElement>,
     record: EventRecord,
   ) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -159,6 +172,16 @@ export function EventTable({
         <table className={styles.eventTable}>
           <thead>
             <tr>
+              <th
+                className={toolbarStyles.checkboxCell}
+                aria-label="Select rows"
+              >
+                <input
+                  type="checkbox"
+                  disabled
+                  aria-label="Select all loading events"
+                />
+              </th>
               <th>Contract</th>
               <th>Type</th>
               <th>Ledger</th>
@@ -171,6 +194,16 @@ export function EventTable({
           <tbody>
             {[...Array(5)].map((_, index) => (
               <tr key={`skeleton-${index}`}>
+                <td className={toolbarStyles.checkboxCell}>
+                  <div
+                    className={styles.skeleton}
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "3px",
+                    }}
+                  />
+                </td>
                 <td data-label="Contract">
                   <div
                     className={styles.skeleton}
@@ -377,6 +410,17 @@ export function EventTable({
       <table className={`${styles.eventTable} soroscan-events-table`}>
         <thead>
           <tr>
+            <th className={toolbarStyles.checkboxCell}>
+              <IndeterminateCheckbox
+                checked={allSelected}
+                indeterminate={someSelected && !allSelected}
+                onChange={onToggleSelectAll}
+                aria-label={
+                  allSelected ? "Deselect all events" : "Select all events"
+                }
+                id="select-all-events"
+              />
+            </th>
             <th>Contract</th>
             <th>Type</th>
             <th>Ledger</th>
@@ -387,207 +431,261 @@ export function EventTable({
           </tr>
         </thead>
         <tbody>
-          {events.map((event) => (
-            <tr
-              key={event.id}
-              style={{
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-              }}
-              onClick={() => onEventClick(event)}
-              onMouseEnter={(mouseEvent) => {
-                mouseEvent.currentTarget.style.boxShadow = `0 0 15px ${getEventTypeColor(
-                  event.eventType,
-                )}`;
-              }}
-              onMouseLeave={(mouseEvent) => {
-                mouseEvent.currentTarget.style.boxShadow = "none";
-              }}
-            >
-              <td data-label="Contract">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                  }}
+          {events.map((event) => {
+            const isSelected = selectedIds.has(event.id);
+
+            return (
+              <tr
+                key={event.id}
+                className={isSelected ? toolbarStyles.selectedRow : undefined}
+                style={{
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+                onClick={() => onEventClick(event)}
+                onMouseEnter={(mouseEvent) => {
+                  if (!isSelected) {
+                    mouseEvent.currentTarget.style.boxShadow = `0 0 15px ${getEventTypeColor(
+                      event.eventType,
+                    )}`;
+                  }
+                }}
+                onMouseLeave={(mouseEvent) => {
+                  mouseEvent.currentTarget.style.boxShadow = "none";
+                }}
+              >
+                <td
+                  className={toolbarStyles.checkboxCell}
+                  onClick={(clickEvent) => clickEvent.stopPropagation()}
                 >
-                  <code>{shortHash(event.contractId)}</code>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(event.id)}
+                    aria-label={`Select event ${event.id}`}
+                    id={`select-event-${event.id}`}
+                  />
+                </td>
+
+                <td data-label="Contract">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <code>{shortHash(event.contractId)}</code>
+                    <button
+                      type="button"
+                      className={styles.btn}
+                      style={{
+                        padding: "0.2rem 0.4rem",
+                        fontSize: "0.7rem",
+                        minWidth: "auto",
+                      }}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        void copyToClipboard(
+                          event.contractId,
+                          `contract-${event.id}`,
+                        );
+                      }}
+                      title="Copy contract ID"
+                    >
+                      {copiedId === `contract-${event.id}` ? "✓" : "📋"}
+                    </button>
+                  </div>
+                </td>
+
+                <td data-label="Type">
+                  <span
+                    className={styles.pill}
+                    style={{
+                      borderColor: getEventTypeColor(event.eventType),
+                      backgroundColor: `${getEventTypeColor(event.eventType)}15`,
+                      color: getEventTypeColor(event.eventType),
+                    }}
+                  >
+                    {event.eventType}
+                  </span>
+                </td>
+
+                <td data-label="Ledger">
                   <button
                     type="button"
                     className={styles.btn}
                     style={{
-                      padding: "0.2rem 0.4rem",
-                      fontSize: "0.7rem",
-                      minWidth: "auto",
+                      padding: "0.2rem 0.5rem",
+                      fontSize: "0.75rem",
                     }}
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
-                      void copyToClipboard(
-                        event.contractId,
-                        `contract-${event.id}`,
-                      );
                     }}
-                    title="Copy contract ID"
                   >
-                    {copiedId === `contract-${event.id}` ? "✓" : "📋"}
+                    {event.ledger}
                   </button>
-                </div>
-              </td>
+                </td>
 
-              <td data-label="Type">
-                <span
-                  className={styles.pill}
-                  style={{
-                    borderColor: getEventTypeColor(event.eventType),
-                    backgroundColor: `${getEventTypeColor(event.eventType)}15`,
-                    color: getEventTypeColor(event.eventType),
-                  }}
-                >
-                  {event.eventType}
-                </span>
-              </td>
+                <td data-label="Time">{formatDateTime(event.timestamp)}</td>
 
-              <td data-label="Ledger">
-                <button
-                  type="button"
-                  className={styles.btn}
-                  style={{
-                    padding: "0.2rem 0.5rem",
-                    fontSize: "0.75rem",
-                  }}
-                  onClick={(clickEvent) => {
-                    clickEvent.stopPropagation();
-                  }}
-                >
-                  {event.ledger}
-                </button>
-              </td>
+                <td data-label="Tx">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <code>{shortHash(event.txHash)}</code>
+                    <button
+                      type="button"
+                      className={styles.btn}
+                      style={{
+                        padding: "0.2rem 0.4rem",
+                        fontSize: "0.7rem",
+                        minWidth: "auto",
+                      }}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        void copyToClipboard(event.txHash, `tx-${event.id}`);
+                      }}
+                      title="Copy transaction hash"
+                    >
+                      {copiedId === `tx-${event.id}` ? "✓" : "📋"}
+                    </button>
+                  </div>
+                </td>
 
-              <td data-label="Time">{formatDateTime(event.timestamp)}</td>
+                {showTags && <td data-label="Tags">{renderTags(event)}</td>}
 
-              <td data-label="Tx">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <code>{shortHash(event.txHash)}</code>
+                <td data-label="Actions">
                   <button
                     type="button"
                     className={styles.btn}
                     style={{
-                      padding: "0.2rem 0.4rem",
-                      fontSize: "0.7rem",
-                      minWidth: "auto",
+                      padding: "0.3rem 0.6rem",
+                      fontSize: "0.75rem",
                     }}
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
-                      void copyToClipboard(event.txHash, `tx-${event.id}`);
+                      onEventClick(event);
                     }}
-                    title="Copy transaction hash"
                   >
-                    {copiedId === `tx-${event.id}` ? "✓" : "📋"}
+                    View
                   </button>
-                </div>
-              </td>
-
-              {showTags && <td data-label="Tags">{renderTags(event)}</td>}
-
-              <td data-label="Actions">
-                <button
-                  type="button"
-                  className={styles.btn}
-                  style={{
-                    padding: "0.3rem 0.6rem",
-                    fontSize: "0.75rem",
-                  }}
-                  onClick={(clickEvent) => {
-                    clickEvent.stopPropagation();
-                    onEventClick(event);
-                  }}
-                >
-                  View
-                </button>
-              </td>
-            </tr>
-          ))}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
       <div className="soroscan-events-card-grid" data-testid="events-card-grid">
-        {events.map((event) => (
-          <article
-            key={event.id}
-            className="soroscan-event-card"
-            data-testid="event-card"
-            role="button"
-            tabIndex={0}
-            onClick={() => onEventClick(event)}
-            onKeyDown={(keyEvent) => handleCardKeyDown(keyEvent, event)}
-          >
-            <div className="soroscan-event-card-header">
-              <div className="soroscan-event-card-title">
-                <span className="soroscan-event-card-label">Event Type</span>
-                <span
-                  className={styles.pill}
-                  style={{
-                    borderColor: getEventTypeColor(event.eventType),
-                    backgroundColor: `${getEventTypeColor(event.eventType)}15`,
-                    color: getEventTypeColor(event.eventType),
-                  }}
-                >
-                  {event.eventType}
-                </span>
-              </div>
-              <span className="soroscan-event-card-label">Tap for details</span>
-            </div>
+        {events.map((event) => {
+          const isSelected = selectedIds.has(event.id);
 
-            <div className="soroscan-event-card-grid-inner">
-              <div className="soroscan-event-card-row">
-                <span className="soroscan-event-card-label">Contract</span>
-                <span className="soroscan-event-card-value">
-                  <code>{shortHash(event.contractId)}</code>
-                </span>
-              </div>
-
-              <div className="soroscan-event-card-row">
-                <span className="soroscan-event-card-label">Ledger</span>
-                <span className="soroscan-event-card-value">
-                  {event.ledger}
-                </span>
-              </div>
-
-              <div className="soroscan-event-card-row">
-                <span className="soroscan-event-card-label">Time</span>
-                <span className="soroscan-event-card-value">
-                  {formatDateTime(event.timestamp)}
-                </span>
-              </div>
-
-              <div className="soroscan-event-card-row">
-                <span className="soroscan-event-card-label">Transaction</span>
-                <span className="soroscan-event-card-value">
-                  <code>{shortHash(event.txHash)}</code>
-                </span>
-              </div>
-
-              {showTags && (
-                <div className="soroscan-event-card-row">
-                  <span className="soroscan-event-card-label">Tags</span>
-                  <span className="soroscan-event-card-value">
-                    {(eventTags[event.id] ?? []).join(", ") || "None"}
+          return (
+            <article
+              key={event.id}
+              className="soroscan-event-card"
+              data-testid="event-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => onEventClick(event)}
+              onKeyDown={(keyEvent) => handleCardKeyDown(keyEvent, event)}
+            >
+              <div className="soroscan-event-card-header">
+                <div className="soroscan-event-card-title">
+                  <span className="soroscan-event-card-label">Event Type</span>
+                  <span
+                    className={styles.pill}
+                    style={{
+                      borderColor: getEventTypeColor(event.eventType),
+                      backgroundColor: `${getEventTypeColor(event.eventType)}15`,
+                      color: getEventTypeColor(event.eventType),
+                    }}
+                  >
+                    {event.eventType}
                   </span>
                 </div>
-              )}
-            </div>
 
-            <div className="soroscan-event-card-footer">View details</div>
-          </article>
-        ))}
+                <label
+                  className={toolbarStyles.checkboxCell}
+                  onClick={(clickEvent) => clickEvent.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(event.id)}
+                    aria-label={`Select event ${event.id}`}
+                  />
+                </label>
+              </div>
+
+              <div className="soroscan-event-card-grid-inner">
+                <div className="soroscan-event-card-row">
+                  <span className="soroscan-event-card-label">Contract</span>
+                  <span className="soroscan-event-card-value">
+                    <code>{shortHash(event.contractId)}</code>
+                  </span>
+                </div>
+
+                <div className="soroscan-event-card-row">
+                  <span className="soroscan-event-card-label">Ledger</span>
+                  <span className="soroscan-event-card-value">
+                    {event.ledger}
+                  </span>
+                </div>
+
+                <div className="soroscan-event-card-row">
+                  <span className="soroscan-event-card-label">Time</span>
+                  <span className="soroscan-event-card-value">
+                    {formatDateTime(event.timestamp)}
+                  </span>
+                </div>
+
+                <div className="soroscan-event-card-row">
+                  <span className="soroscan-event-card-label">Transaction</span>
+                  <span className="soroscan-event-card-value">
+                    <code>{shortHash(event.txHash)}</code>
+                  </span>
+                </div>
+
+                {showTags && (
+                  <div className="soroscan-event-card-row">
+                    <span className="soroscan-event-card-label">Tags</span>
+                    <span className="soroscan-event-card-value">
+                      {(eventTags[event.id] ?? []).join(", ") || "None"}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="soroscan-event-card-footer">View details</div>
+            </article>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+interface IndeterminateCheckboxProps extends InputHTMLAttributes<HTMLInputElement> {
+  indeterminate?: boolean;
+}
+
+function IndeterminateCheckbox({
+  indeterminate = false,
+  ...props
+}: IndeterminateCheckboxProps) {
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+
+  return <input type="checkbox" ref={ref} {...props} />;
 }
