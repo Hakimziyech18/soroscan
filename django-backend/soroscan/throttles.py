@@ -24,6 +24,7 @@ import time
 from django.core.cache import cache
 from rest_framework.settings import api_settings
 from rest_framework.throttling import BaseThrottle, SimpleRateThrottle, ScopedRateThrottle
+from soroscan.ingest.metrics import throttle_rejections_total
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,7 @@ class APIKeyThrottle(BaseThrottle):
             except APIKey.DoesNotExist:
                 # Invalid / revoked key → reject
                 self._set_headers(request, limit=0, remaining=0, reset=self._next_reset())
+                throttle_rejections_total.labels(reason="invalid_api_key").inc()
                 return False
 
         # Determine effective quota (contract-level override wins when lower)
@@ -175,6 +177,7 @@ class APIKeyThrottle(BaseThrottle):
                 quota,
                 extra={"api_key_id": api_key.id},
             )
+            throttle_rejections_total.labels(reason="quota_exhausted").inc()
             return False
 
         # Increment atomically via add+incr pattern

@@ -33,6 +33,7 @@ __all__ = [
     "archive_events_total",
     "ledgers_scanned_total",
     "events_rate_limited_total",
+    "throttle_rejections_total",
     "events_filtered_total",
     "events_validation_failures_total",
     "webhook_payload_bytes",
@@ -231,6 +232,13 @@ events_rate_limited_total = _get_or_create(
     "soroscan_events_rate_limited_total",
     "Total number of events skipped due to rate limiting",
     ["contract_id", "network"],
+)
+
+throttle_rejections_total = _get_or_create(
+    Counter,
+    "soroscan_throttle_rejections_total",
+    "Rejected API requests by throttle reason",
+    ["reason"],
 )
 
 events_filtered_total = _get_or_create(
