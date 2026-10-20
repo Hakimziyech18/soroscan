@@ -14,6 +14,8 @@ __all__ = [
     "task_duration_seconds",
     "active_contracts_gauge",
     "current_ingestion_rate_gauge",
+    "contract_health_status_gauge",
+    "contract_health_transitions_total",
     # detailed pipeline metrics
     "ingest_errors_total",
     "events_skipped_total",
@@ -50,6 +52,10 @@ __all__ = [
     "celery_tasks_total",
     "celery_tasks_active",
     "celery_task_duration_seconds",
+    # re-org detection metrics
+    "reorg_detected_total",
+    "reorg_rolled_back_events_total",
+    "last_reorg_ledger",
 ]
 
 
@@ -103,6 +109,20 @@ active_contracts_gauge = _get_or_create(
     Gauge,
     "soroscan_tracked_contracts_active",
     "Number of currently active tracked contracts",
+)
+
+contract_health_status_gauge = _get_or_create(
+    Gauge,
+    "soroscan_contract_health_status",
+    "Contract health status (0=healthy, 1=degraded, 2=failed)",
+    ["contract_id"],
+)
+
+contract_health_transitions_total = _get_or_create(
+    Counter,
+    "soroscan_contract_health_transitions_total",
+    "Contract health status transitions",
+    ["from_status", "to_status"],
 )
 
 # ---------------------------------------------------------------------------
@@ -347,10 +367,29 @@ celery_tasks_active = _get_or_create(
     "soroscan_celery_tasks_active",
     "Celery tasks currently executing",
     ["task_name"],
+    multiprocess_mode="livesum",
 )
 celery_task_duration_seconds = _get_or_create(
     Histogram,
     "soroscan_celery_task_duration_seconds",
     "Celery task execution duration",
     ["task_name"],
+)
+
+reorg_detected_total = _get_or_create(
+    Counter,
+    "soroscan_reorg_detected_total",
+    "Total number of ledger re-orgs detected",
+)
+
+reorg_rolled_back_events_total = _get_or_create(
+    Counter,
+    "soroscan_reorg_rolled_back_events_total",
+    "Total number of events rolled back due to ledger re-orgs",
+)
+
+last_reorg_ledger = _get_or_create(
+    Gauge,
+    "soroscan_last_reorg_ledger",
+    "Ledger sequence of the most recent detected re-org fork",
 )
